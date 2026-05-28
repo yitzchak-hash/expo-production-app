@@ -1,7 +1,7 @@
 const DATA_KEY = 'tzviair_expo_v1';
 
-function kvAvailable() {
-  return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+function redisAvailable() {
+  return !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
 }
 
 export default async function handler(req, res) {
@@ -10,15 +10,19 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  if (!kvAvailable()) {
-    return res.status(503).json({ error: 'KV not configured', localOnly: true });
+  if (!redisAvailable()) {
+    return res.status(503).json({ error: 'Redis not configured', localOnly: true });
   }
 
   try {
-    const { kv } = await import('@vercel/kv');
+    const { Redis } = await import('@upstash/redis');
+    const redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
 
     if (req.method === 'GET') {
-      const data = await kv.get(DATA_KEY);
+      const data = await redis.get(DATA_KEY);
       return res.status(200).json({ data: data ?? null });
     }
 
@@ -27,13 +31,13 @@ export default async function handler(req, res) {
       if (!body || !body.data) {
         return res.status(400).json({ error: 'Missing data' });
       }
-      await kv.set(DATA_KEY, body.data);
+      await redis.set(DATA_KEY, body.data);
       return res.status(200).json({ ok: true });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (err) {
-    console.error('KV error:', err.message);
+    console.error('Redis error:', err.message);
     return res.status(500).json({ error: 'Storage error' });
   }
 }
